@@ -49,7 +49,7 @@ function zonedToUtc(y, m, d, h, mi, tz) {
 function unescape(s) {
   return s.replace(/\\n/gi, ' ').replace(/\\([,;\\])/g, '$1');
 }
-// DTSTART;TZID=Asia/Kolkata:20261112T093000 -> { date, h, mi, tz, allDay, utc }
+// DTSTART;TZID=Europe/Berlin:20261112T093000 -> { date, h, mi, tz, allDay, utc }
 function parseStamp(params, value, fallbackTz) {
   const m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?(Z)?)?$/.exec(value.trim());
   if (!m) return null;

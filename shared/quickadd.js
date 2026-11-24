@@ -1,6 +1,6 @@
 // Natural-language task entry.
 //
-//   Update the GDD #GameDev @deep p2 fri 5pm for 45m {sun}
+//   Draft the project brief #Projects @deep p2 fri 5pm for 45m {sun}
 //   Stretch every day at 9am, 2pm and 9pm
 //   Review PRs every weekday
 //   Water plants every! 3 days

@@ -1,6 +1,6 @@
 // Saved-filter query language.
 //
-//   today | overdue            (today | overdue) & #Office
+//   today | overdue            (today | overdue) & #Work
 //   p1 & !@waiting             7 days & !recurring
 //   no date, no deadline, no estimate, no label
 //   due before: fri            deadline before: +7

@@ -199,7 +199,7 @@ function Item({ it, date, compact }) {
       onKeyDown=${(e) => { if (e.key === 'Enter') openBlockForm({ block: b }); }}>
       <div class="ci-top"><span class="ci-title">${it.t ? it.t.title : b.title}</span>
         ${b.status === 'planned' && !compact ? html`<button class="btn tiny" onClick=${(e) => { e.stopPropagation(); op('tb.start', { id: b.id }); }}><${Icon} name="play" size=${10} fill=${true} /> Start</button>` : null}</div>
-      <div class="ci-time">${span(it.start, it.end)} · block${b.hardStop ? ', hard stop' : ''}${b.status === 'running' ? ' · running' : ''}${b.status === 'done' ? ` · did ${fmtDur(b.actualMin) || '0m'}` : ''}</div>
+      <div class="ci-time">${span(it.start, it.end)} · block${b.hardStop ? ', hard stop' : ''}${b.seriesId ? html` <${Icon} name="repeat" size=${11} />` : null}${b.status === 'running' ? ' · running' : ''}${b.status === 'done' ? ` · did ${fmtDur(b.actualMin) || '0m'}` : ''}</div>
       ${!short && b.note ? html`<div class="ci-note">${b.note}</div>` : null}
       ${it.fixed ? null : html`<div class="ci-grip" aria-hidden="true" onPointerDown=${(e) => { e.stopPropagation(); beginDrag(e, { kind: 'tb', id: b.id, mode: 'resize', title: b.title, dur: b.len, date, start: b.start, grab: 0 }); }}></div>`}
     </div>`;

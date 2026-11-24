@@ -4,7 +4,7 @@
 import { DEFAULT_SETTINGS, globalCompare, isOpen } from '/shared/logic.js';
 import { addDays, endOfMonth, todayIn, setClock24 } from '/shared/dates.js';
 
-const COLLECTIONS = ['settings', 'domains', 'sections', 'blocks', 'rules', 'tasks', 'comments', 'labels', 'filters', 'timeblocks', 'occs', 'plans'];
+const COLLECTIONS = ['settings', 'domains', 'sections', 'blocks', 'rules', 'tasks', 'comments', 'labels', 'filters', 'timeblocks', 'series', 'occs', 'plans'];
 
 export const state = {
   ready: false,

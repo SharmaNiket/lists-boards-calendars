@@ -2,7 +2,7 @@
 
 import { html, useEffect, useRef, useState } from '/vendor/preact-htm.js';
 import { state, notify, op, sel, toast } from './store.js';
-import { Icon, openPop, closePop, openMenu, Modal, askText, askConfirm } from './ui.js';
+import { Icon, openPop, closePop, openMenu, Modal, askText, askConfirm, rich } from './ui.js';
 import { addDays, diffDays, dow, fmtDate, fmtTime, fmtDur, fmtLong, DAY_SHORT } from '/shared/dates.js';
 import { describe } from '/shared/recur.js';
 import { parseQuickAdd, parseRecur, parseDuration } from '/shared/quickadd.js';
@@ -212,7 +212,7 @@ export function Meta({ task: t, showDomain, showParent, hideDue, hideSubs }) {
   if (t.duration) bits.push(html`<span class="chip" title="Estimate"><${Icon} name="clock" size=${13} />${fmtDur(t.duration)}</span>`);
   if (prog.total && !hideSubs) bits.push(html`<span class="chip" title="Subtasks"><${Icon} name="sub" size=${13} />${prog.done}/${prog.total}</span>`);
   if (comments) bits.push(html`<span class="chip"><${Icon} name="comment" size=${13} />${comments}</span>`);
-  for (const l of t.labels || []) bits.push(html`<span class="chip label">@${l}</span>`);
+  for (const l of t.labels || []) bits.push(html`<span class="chip label"><${Icon} name="label" size=${12} />${l}</span>`);
   if (t.recur && t.rolledAt === state.today && t.missed) bits.push(html`<span class="chip faint" title=${'Rolled forward from ' + fmtLong(t.rolledFrom || t.due)}>picked back up</span>`);
   if (showDomain) bits.push(html`<span class="chip where">${domain ? html`<span class="dot" style=${{ background: domain.color }}></span>${domain.name}` : 'Inbox'}${parent ? ' › ' + parent.title : ''}</span>`);
   else if (parent) bits.push(html`<span class="chip where">${parent.title}</span>`);
@@ -257,8 +257,8 @@ export function TaskRow({ task: t, depth = 0, ctx = {} }) {
         : html`<span class="twist-space"></span>`}
       <${Check} task=${t} />
       <div class="task-main" onClick=${() => openTask(t.id)}>
-        <div class="task-title">${tier === 'floor' ? html`<span class="tier floor" title="Floor">Floor</span>` : tier === 'stretch' ? html`<span class="tier stretch" title="Stretch">Stretch</span>` : null}${title}</div>
-        ${t.description && !ctx.flat ? html`<div class="task-desc">${t.description}</div>` : null}
+        <div class="task-title">${tier === 'floor' ? html`<span class="tier floor" title="Floor">Floor</span>` : tier === 'stretch' ? html`<span class="tier stretch" title="Stretch">Stretch</span>` : null}${rich(title)}</div>
+        ${t.description && !ctx.flat ? html`<div class="task-desc">${rich(t.description)}</div>` : null}
         <${Meta} task=${t} showDomain=${ctx.showDomain} showParent=${ctx.flat} hideDue=${ctx.hideDue} />
         ${t.stopNote && !t.completedAt ? html`<div class="stop-note"><${Icon} name="note" size=${13} />${t.stopNote}</div>` : null}
       </div>
@@ -368,6 +368,9 @@ function TaskWindow({ task: t, close }) {
   const [desc, setDesc] = useState(t.description || '');
   const [note, setNote] = useState(t.stopNote || '');
   const [comment, setComment] = useState('');
+  const [editDesc, setEditDesc] = useState(false);
+  const descRef = useRef(null);
+  useEffect(() => { if (editDesc) descRef.current?.focus(); }, [editDesc]);
   const [est, setEst] = useState(t.duration ? fmtDur(t.duration) : '');
   const [labels, setLabels] = useState((t.labels || []).join(' '));
   useEffect(() => { setNote(t.stopNote || ''); }, [t.stopNote]);
@@ -396,7 +399,9 @@ function TaskWindow({ task: t, close }) {
           <${Check} task=${t} />
           <input class="title-input" type="text" value=${title} aria-label="Title" onInput=${(e) => setTitle(e.target.value)} onBlur=${() => title.trim() && title !== t.title && save({ title })} onKeyDown=${(e) => { if (e.key === 'Enter') e.target.blur(); }} />
         </div>
-        <textarea class="desc-input" rows="2" placeholder="Description" value=${desc} onInput=${(e) => setDesc(e.target.value)} onBlur=${() => desc !== (t.description || '') && save({ description: desc })}></textarea>
+        ${editDesc || !desc
+          ? html`<textarea ref=${descRef} class="desc-input" rows=${Math.min(10, Math.max(2, desc.split('\n').length))} placeholder="Description" value=${desc} onInput=${(e) => setDesc(e.target.value)} onBlur=${() => { setEditDesc(false); if (desc !== (t.description || '')) save({ description: desc }); }}></textarea>`
+          : html`<div class="desc-view" tabindex="0" title="Click to edit" onClick=${() => setEditDesc(true)} onKeyDown=${(e) => { if (e.key === 'Enter') setEditDesc(true); }}>${rich(desc)}</div>`}
         <label class="stop-field"><span><${Icon} name="note" size=${14} /> Where I stopped</span>
           <input type="text" value=${note} placeholder="A line for next time: where you are and what comes next" onInput=${(e) => setNote(e.target.value)} onBlur=${() => note !== (t.stopNote || '') && save({ stopNote: note })} onKeyDown=${(e) => { if (e.key === 'Enter') e.target.blur(); }} />
         </label>
@@ -405,7 +410,7 @@ function TaskWindow({ task: t, close }) {
         <${AddTask} defaults=${{ parentId: t.id }} placeholder="Subtask" label="Add subtask" />
         ${kids.length ? html`<div class="faint small-note">This task completes itself when every subtask is done.</div>` : null}
         <h3 class="tm-h">Comments</h3>
-        ${comments.map((c) => html`<div class="comment" key=${c.id}><div class="comment-text">${c.text}</div><div class="faint">${new Date(c.at).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })} <button class="link-btn" onClick=${() => op('comment.delete', { id: c.id })}>Delete</button></div></div>`)}
+        ${comments.map((c) => html`<div class="comment" key=${c.id}><div class="comment-text">${rich(c.text)}</div><div class="faint">${new Date(c.at).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })} <button class="link-btn" onClick=${() => op('comment.delete', { id: c.id })}>Delete</button></div></div>`)}
         <form class="comment-form" onSubmit=${(e) => { e.preventDefault(); if (comment.trim()) { op('comment.add', { taskId: t.id, text: comment }); setComment(''); } }}>
           <input type="text" value=${comment} placeholder="Add a comment" aria-label="Add a comment" onInput=${(e) => setComment(e.target.value)} />
           <button class="btn small" disabled=${!comment.trim()}>Comment</button>

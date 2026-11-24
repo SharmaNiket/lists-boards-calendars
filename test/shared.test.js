@@ -7,7 +7,7 @@ import { compileFilter } from '../shared/filter.js';
 import { dayLoad, pickForTime, globalCompare } from '../shared/logic.js';
 
 const TODAY = '2026-11-11'; // a Wednesday
-const domains = [{ id: 'o', name: 'Office', weight: 5 }, { id: 'g', name: 'Game Dev', weight: 3 }];
+const domains = [{ id: 'o', name: 'Work', weight: 5 }, { id: 'g', name: 'Side Projects', weight: 3 }];
 const ctx = { today: TODAY, weekEnd: 0, domains };
 
 test('end of week is the coming Sunday', () => {
@@ -23,8 +23,8 @@ test('month maths clamps short months', () => {
 });
 
 test('quick add pulls out domain, label, priority, date, time, duration and deadline', () => {
-  const r = parseQuickAdd('Update the GDD #GameDev @deep p2 fri 5pm for 45m {sun}', ctx);
-  assert.equal(r.title, 'Update the GDD');
+  const r = parseQuickAdd('Draft the project brief #SideProjects @deep p2 fri 5pm for 45m {sun}', ctx);
+  assert.equal(r.title, 'Draft the project brief');
   assert.equal(r.domainId, 'g');
   assert.deepEqual(r.labels, ['deep']);
   assert.equal(r.priority, 2);
@@ -89,8 +89,8 @@ test('filters', () => {
   ];
   const run = (q) => tasks.filter(compileFilter(q, ctx)).map((t) => t.id);
   assert.deepEqual(run('today | overdue'), ['1', '2']);
-  assert.deepEqual(run('(today | overdue) & #Office'), ['1']);
-  assert.deepEqual(run('!p1 & #gamedev'), ['2', '3']);
+  assert.deepEqual(run('(today | overdue) & #Work'), ['1']);
+  assert.deepEqual(run('!p1 & #sideprojects'), ['2', '3']);
   assert.deepEqual(run('@deep'), ['1']);
   assert.deepEqual(run('no date'), ['3']);
   assert.deepEqual(run('<30m'), ['3']);
@@ -100,8 +100,8 @@ test('filters', () => {
 
 test('global order puts domain weight before priority', () => {
   const byId = new Map(domains.map((d) => [d.id, d]));
-  const list = [{ id: 'gameP1', domainId: 'g', priority: 1 }, { id: 'officeP2', domainId: 'o', priority: 2 }];
-  assert.deepEqual(list.sort(globalCompare(byId)).map((t) => t.id), ['officeP2', 'gameP1']);
+  const list = [{ id: 'sideP1', domainId: 'g', priority: 1 }, { id: 'workP2', domainId: 'o', priority: 2 }];
+  assert.deepEqual(list.sort(globalCompare(byId)).map((t) => t.id), ['workP2', 'sideP1']);
 });
 
 test('day load adds meetings and blocks and flags clashes', () => {

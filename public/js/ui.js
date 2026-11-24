@@ -48,6 +48,29 @@ export function Icon({ name, size = 18, fill = false }) {
   return html`<svg class="icon" width=${size} height=${size} viewBox="0 0 24 24" fill=${fill ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d=${PATHS[name] || ''} /></svg>`;
 }
 
+// Turns URLs and [text](url) inside plain text into links that open in a new tab.
+const LINK = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>"']+)/g;
+export function rich(text) {
+  const src = String(text || '');
+  const out = [];
+  let last = 0;
+  for (const m of src.matchAll(LINK)) {
+    let url = m[2] || m[3];
+    let tail = '';
+    if (!m[2]) {
+      const trimmed = url.replace(/[.,;:!?)\]]+$/, '');
+      tail = url.slice(trimmed.length);
+      url = trimmed;
+    }
+    if (m.index > last) out.push(src.slice(last, m.index));
+    out.push(html`<a class="link" href=${url} target="_blank" rel="noopener noreferrer" onClick=${(e) => e.stopPropagation()}>${m[1] || url.replace(/^https?:\/\/(www\.)?/, '')}</a>`);
+    if (tail) out.push(tail);
+    last = m.index + m[0].length;
+  }
+  if (last < src.length) out.push(src.slice(last));
+  return out;
+}
+
 // ---------- popovers and menus ----------
 // A popover is anchored to the element that opened it and closes on an
 // outside click or Escape.
@@ -153,14 +176,14 @@ export function ModalLayer() {
 }
 
 // Asks for one line of text.
-export function askText({ title, label, value = '', placeholder = '', confirm = 'Save', multiline = false }) {
+export function askText({ title, label, value = '', placeholder = '', confirm = 'Save', multiline = false, allowEmpty = false }) {
   return new Promise((resolve) => {
     const Form = () => {
       const [v, setV] = useState(value);
       const ref = useRef(null);
       useEffect(() => { ref.current?.focus(); ref.current?.select?.(); }, []);
       const done = (val) => { closeModal(); resolve(val); };
-      return html`<form class="form" onSubmit=${(e) => { e.preventDefault(); done(v.trim() ? v.trim() : null); }}>
+      return html`<form class="form" onSubmit=${(e) => { e.preventDefault(); done(v.trim() || allowEmpty ? v.trim() : null); }}>
         ${label ? html`<label class="field-label">${label}</label>` : null}
         ${multiline
           ? html`<textarea ref=${ref} rows="3" value=${v} placeholder=${placeholder} onInput=${(e) => setV(e.target.value)}></textarea>`

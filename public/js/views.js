@@ -75,7 +75,7 @@ export function TodayView() {
         </section>` : null}
 
         <section class="group">
-          <h2 class="group-title">Also today <span class="faint">${dueToday.length}</span><span class="group-hint">sorted by domain weight, then each domain's own priority</span></h2>
+          <h2 class="group-title">Also today <span class="faint">${dueToday.length}</span><span class="group-hint">sorted by domain severity, then each domain's own priority</span></h2>
           <${TaskList} tasks=${dueToday} ctx=${ctx} />
           <${AddTask} defaults=${{ due: today }} placeholder="Add a task for today" />
         </section>
@@ -103,8 +103,8 @@ export function TodayView() {
         </div>
         <div class="card-box">
           <h3>Why this order?</h3>
-          <div class="faint small-note">Each domain has a weight. Today sorts by weight first, then by the priority you set inside that domain.</div>
-          ${sel.domains().slice().sort((a, b) => (b.weight || 0) - (a.weight || 0)).map((d) => html`<div class="weight-row" key=${d.id}><span class="dot" style=${{ background: d.color }}></span><span class="grow">${d.name}</span><div class="pips">${[1, 2, 3, 4, 5].map((w) => html`<button class=${'pip' + (w <= d.weight ? ' on' : '')} aria-label=${`Set ${d.name} weight to ${w}`} onClick=${() => op('domain.save', { id: d.id, weight: w })}></button>`)}</div></div>`)}
+          <div class="faint small-note">Each domain has a severity from 1 to 5. Today sorts by severity first, then by the priority you set inside that domain.</div>
+          ${sel.domains().slice().sort((a, b) => (b.weight || 0) - (a.weight || 0)).map((d) => html`<div class="weight-row" key=${d.id}><span class="dot" style=${{ background: d.color }}></span><span class="grow">${d.name}</span><div class="pips">${[1, 2, 3, 4, 5].map((w) => html`<button class=${'pip' + (w <= d.weight ? ' on' : '')} aria-label=${`Set ${d.name} severity to ${w}`} onClick=${() => op('domain.save', { id: d.id, weight: w })}></button>`)}</div></div>`)}
         </div>
       </aside>
     </div>
@@ -163,14 +163,14 @@ function DayGroup({ date, tasks }) {
 }
 
 // ---------- Calendar ----------
-export function MonthGrid({ month }) {
+export function MonthGrid({ month, filter, plain }) {
   const first = month + '-01';
   const gridStart = startOfWeek(first, sel.settings().weekEnd);
   const cells = [];
   for (let i = 0; i < 42; i++) cells.push(addDays(gridStart, i));
   const weeksShown = cells[35].slice(0, 7) === month ? 6 : 5;
   useEffect(() => { loadCalendar(cells[0], cells[41]); }, [month, state.rev > 0]);
-  const open = sel.open();
+  const open = filter ? sel.open().filter(filter) : sel.open();
   const byDay = new Map();
   for (const t of open) {
     for (const d of new Set([t.due, t.deadline].filter(Boolean))) {
@@ -182,13 +182,13 @@ export function MonthGrid({ month }) {
   const firstDow = dow(gridStart);
   return html`<div class="cal-scroll"><div class="cal">
       <div class="cal-head">${[0, 1, 2, 3, 4, 5, 6].map((i) => html`<div key=${i}>${DAY_SHORT[(firstDow + i) % 7]}</div>`)}</div>
-      <div class="cal-grid">${cells.slice(0, weeksShown * 7).map((d) => html`<${CalCell} key=${d} date=${d} dim=${d.slice(0, 7) !== month} tasks=${(byDay.get(d) || []).sort(cmp)} />`)}</div>
+      <div class="cal-grid">${cells.slice(0, weeksShown * 7).map((d) => html`<${CalCell} key=${d} date=${d} dim=${d.slice(0, 7) !== month} plain=${plain} tasks=${(byDay.get(d) || []).sort(cmp)} />`)}</div>
     </div></div>`;
 }
-function CalCell({ date, dim, tasks }) {
+function CalCell({ date, dim, tasks, plain }) {
   const [over, setOver] = useState(false);
-  const events = sel.eventsOn(date);
-  const load = loadFor(date);
+  const events = plain ? [] : sel.eventsOn(date);
+  const load = plain ? { totalMin: 0 } : loadFor(date);
   const shown = tasks.slice(0, 4);
   return html`<div class=${'cal-cell' + (dim ? ' dim' : '') + (date === state.today ? ' today' : '') + (over ? ' drop' : '')}
     onDragOver=${(e) => { if (getDragId()) { e.preventDefault(); setOver(true); } }}
@@ -205,7 +205,7 @@ function CalCell({ date, dim, tasks }) {
 }
 
 // ---------- filters, labels, search ----------
-const SYNTAX = [['today | overdue', 'either'], ['p1 & #Office', 'both'], ['!@waiting', 'not'], ['7 days', 'due in the next week'], ['no date', 'undated'], ['no estimate', 'needs sizing'], ['deadline before: +7', 'deadline within a week'], ['<30m', 'short tasks'], ['recurring', 'repeats'], ['floor', "on today's floor"], ['search: invoice', 'text']];
+const SYNTAX = [['today | overdue', 'either'], ['p1 & #Work', 'both'], ['!@waiting', 'not'], ['7 days', 'due in the next week'], ['no date', 'undated'], ['no estimate', 'needs sizing'], ['deadline before: +7', 'deadline within a week'], ['<30m', 'short tasks'], ['recurring', 'repeats'], ['floor', "on today's floor"], ['search: invoice', 'text']];
 
 async function editFilter(f) {
   const name = await askText({ title: f ? 'Edit filter' : 'New filter', label: 'Name', value: f ? f.name : '', placeholder: 'e.g. Quick wins' });
@@ -255,7 +255,7 @@ export function SearchView({ q }) {
   return html`<div class="page">
     <header class="page-head"><div><h1>Search</h1><div class="muted">Plain words search titles and descriptions. Filter queries work here too.</div></div></header>
     <form class="search-form" onSubmit=${(e) => { e.preventDefault(); go('search/' + encodeURIComponent(text)); }}>
-      <input type="search" value=${text} autofocus placeholder="Search tasks, or try: p1 & #Office" aria-label="Search" onInput=${(e) => setText(e.target.value)} />
+      <input type="search" value=${text} autofocus placeholder="Search tasks, or try: p1 & #Work" aria-label="Search" onInput=${(e) => setText(e.target.value)} />
       <button class="btn primary">Search</button>
     </form>
     ${needle ? html`<${TaskList} tasks=${open} ctx=${flat} empty=${html`<div class="faint pad">No open tasks match "${needle}".</div>`} />` : null}
@@ -324,11 +324,11 @@ export function SettingsView() {
 
     <section class="settings-box">
       <h2>Domains</h2>
-      <p class="muted">Weight decides whose tasks come first in Today. Priorities stay inside each domain.</p>
+      <p class="muted">Severity decides whose tasks come first in Today. Priorities stay inside each domain.</p>
       ${domains.map((d, i) => html`<div class="rule-line" key=${d.id}>
         <span class="dot" style=${{ background: d.color }}></span>
         <input type="text" value=${d.name} aria-label="Domain name" onChange=${(e) => e.target.value.trim() && op('domain.save', { id: d.id, name: e.target.value.trim() })} />
-        <span class="faint">Weight</span>
+        <span class="faint">Severity</span>
         <div class="seg">${[1, 2, 3, 4, 5].map((w) => html`<button class=${d.weight === w ? 'on' : ''} onClick=${() => op('domain.save', { id: d.id, weight: w })}>${w}</button>`)}</div>
         <button class="icon-btn small" aria-label="Move up" disabled=${i === 0} onClick=${() => moveDomain(i, i - 1)}><${Icon} name="arrowUp" size=${14} /></button>
         <button class="icon-btn small" aria-label="Move down" disabled=${i === domains.length - 1} onClick=${() => moveDomain(i, i + 1)}><${Icon} name="arrowDown" size=${14} /></button>
@@ -347,7 +347,7 @@ export function SettingsView() {
         <label class="field"><span>Clock</span><select value=${s.clock24 === false ? '12' : '24'} onChange=${(e) => save({ clock24: e.target.value === '24' })}><option value="24">24-hour (17:30)</option><option value="12">12-hour (5:30 PM)</option></select></label>
         <label class="field"><span>Calendar starts</span><input type="time" value=${s.dayStart} onChange=${(e) => save({ dayStart: e.target.value })} /></label>
         <label class="field"><span>Week ends on</span><select value=${String(s.weekEnd)} onChange=${(e) => save({ weekEnd: +e.target.value })}>${DAY_NAMES.map((n, i) => html`<option value=${String(i)}>${n}</option>`)}</select></label>
-        <label class="field"><span>Time zone</span><input type="text" value=${s.tz} onChange=${(e) => { try { new Intl.DateTimeFormat('en', { timeZone: e.target.value }); save({ tz: e.target.value }); } catch { toast('Unknown time zone. Example: Asia/Kolkata', { kind: 'error' }); } }} /></label>
+        <label class="field"><span>Time zone</span><input type="text" value=${s.tz} onChange=${(e) => { try { new Intl.DateTimeFormat('en', { timeZone: e.target.value }); save({ tz: e.target.value }); } catch { toast('Unknown time zone. Example: Europe/London', { kind: 'error' }); } }} /></label>
       </div>
       <p class="faint">"End of week" in board rules means the coming ${DAY_NAMES[s.weekEnd]}.</p>
     </section>

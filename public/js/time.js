@@ -4,7 +4,9 @@
 import { html, useEffect, useState } from '/vendor/preact-htm.js';
 import { state, notify, op, sel, go, loadCalendar, toast } from './store.js';
 import { Icon, openMenu, openModal, closeModal, Bar, Empty } from './ui.js';
-import { TaskRow, openTask, Check, Meta } from './tasks.js';
+import { TaskRow, openTask, Check, Meta, recurToText } from './tasks.js';
+import { parseRecur } from '/shared/quickadd.js';
+import { describe } from '/shared/recur.js';
 import { addDays, startOfWeek, fmtDur, fmtTime, fmtLong, fromMin, toMin, nowMinIn, DAY_NAMES, dow } from '/shared/dates.js';
 import { dayLoad, pickForTime, domainCompare, isOpen } from '/shared/logic.js';
 
@@ -54,10 +56,25 @@ function BlockForm({ block, date, start }) {
   const [len, setLen] = useState(block ? block.len : s.defaultBlockLen);
   const [hard, setHard] = useState(block ? !!block.hardStop : true);
   const [day, setDay] = useState(block ? block.date : date);
+  const series = block && block.seriesId ? state.docs.series.get(block.seriesId) : null;
+  const was = series ? recurToText(series.recur) : '';
+  const [rep, setRep] = useState(was);
+  const [scope, setScope] = useState('one');
+  const parsed = rep.trim() ? parseRecur(rep.trim().replace(/\s+at\s+.*$/i, '')) : null;
+  const bad = !!rep.trim() && !parsed;
   const candidates = sel.leaves().filter((t) => (domainId ? t.domainId === domainId : true)).sort(domainCompare).slice(0, 40);
   const save = async () => {
-    await op('tb.save', { id: block?.id, date: day, start: toMin(at) ?? 540, len: +len || 60, domainId: domainId || null, taskId: taskId || null, hardStop: hard });
+    if (bad) return;
+    const args = { id: block?.id, date: day, start: toMin(at) ?? 540, len: +len || 60, domainId: domainId || null, taskId: taskId || null, hardStop: hard };
+    if (rep.trim() !== was) args.recur = rep.trim() ? rep.trim().replace(/\s+at\s+.*$/i, '') : null;
+    else if (series && scope === 'series') args.scope = 'series';
+    await op('tb.save', args);
     closeModal();
+  };
+  const remove = (e) => {
+    const del = async (sc) => { await op('tb.delete', { id: block.id, scope: sc }); closeModal(); };
+    if (!series) return del('one');
+    openMenu(e, [{ label: 'Just this block', icon: 'trash', danger: true, fn: () => del('one') }, { label: 'This and every later one', icon: 'repeat', danger: true, fn: () => del('series') }]);
   };
   return html`<div class="form">
     <label class="field"><span>Domain</span>
@@ -79,11 +96,17 @@ function BlockForm({ block, date, start }) {
     </div>
     <div class="seg">${[25, 45, 60, 90, 120].map((n) => html`<button class=${+len === n ? 'on' : ''} onClick=${() => setLen(n)}>${fmtDur(n)}</button>`)}</div>
     <label class="check-label"><input type="checkbox" checked=${hard} onChange=${(e) => setHard(e.target.checked)} /> Hard stop: end on time, then ask where I stopped</label>
+    <label class="field"><span>Repeat</span><input type="text" value=${rep} placeholder="Leave empty for a one-off. Or: every weekday, every mon, thu, every 2 days" onInput=${(e) => setRep(e.target.value)} /></label>
+    ${rep.trim() ? html`<div class=${'hint-line' + (bad ? ' bad' : '')}>${bad ? 'I can\u2019t read that. Try "every weekday" or "every mon, thu".' : describe(parsed) + ', at the start time above'}</div>` : null}
+    ${series && rep.trim() === was ? html`<div class="seg" role="group" aria-label="Apply changes to">
+      <button class=${scope === 'one' ? 'on' : ''} onClick=${() => setScope('one')}>Just this block</button>
+      <button class=${scope === 'series' ? 'on' : ''} onClick=${() => setScope('series')}>This and later ones</button>
+    </div>` : null}
     <div class="form-actions">
-      ${block ? html`<button class="btn danger-ghost" onClick=${async () => { await op('tb.delete', { id: block.id }); closeModal(); }}>Delete</button>` : null}
+      ${block ? html`<button class="btn danger-ghost" onClick=${remove}>Delete</button>` : null}
       <span class="grow"></span>
       <button class="btn" onClick=${closeModal}>Cancel</button>
-      <button class="btn primary" onClick=${save}>${block ? 'Save' : 'Add block'}</button>
+      <button class="btn primary" disabled=${bad} onClick=${save}>${block ? 'Save' : 'Add block'}</button>
     </div>
   </div>`;
 }

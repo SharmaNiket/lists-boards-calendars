@@ -5,7 +5,7 @@
 
 import { DatabaseSync } from 'node:sqlite';
 
-export const COLLECTIONS = ['settings', 'domains', 'sections', 'blocks', 'rules', 'tasks', 'comments', 'labels', 'filters', 'timeblocks', 'occs', 'plans'];
+export const COLLECTIONS = ['settings', 'domains', 'sections', 'blocks', 'rules', 'tasks', 'comments', 'labels', 'filters', 'timeblocks', 'series', 'occs', 'plans'];
 
 export class Store {
   constructor(file) {

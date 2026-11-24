@@ -3,11 +3,11 @@
 
 import { html, useState } from '/vendor/preact-htm.js';
 import { state, notify, op, sel, go, toast } from './store.js';
-import { Icon, openMenu, openModal, closeModal, askText, askConfirm, Empty } from './ui.js';
+import { Icon, openMenu, openModal, closeModal, askText, askConfirm, Empty, rich } from './ui.js';
 import { TaskRow, AddTask, Meta, Check, openTask, taskMenu, getDragId, setDragId, dropZone, dropArgs } from './tasks.js';
-import { addDays, startOfWeek, fmtDur, describeRelative } from '/shared/dates.js';
+import { addDays, addMonths, startOfWeek, fmtDur, describeRelative, MONTH_NAMES } from '/shared/dates.js';
 import { domainCompare, isOpen, PRIORITY_COLORS } from '/shared/logic.js';
-import { DOMAIN_COLORS } from './views.js';
+import { DOMAIN_COLORS, MonthGrid } from './views.js';
 
 const ROLES = [['', 'Plain column'], ['backlog', 'Backlog'], ['todo', 'To-Do'], ['doing', 'In progress'], ['done', 'Done (completes the card)']];
 const ACTIONS = [['deadline', 'Set deadline'], ['due', 'Set date'], ['startDate', 'Set start date'], ['priority', 'Set priority'], ['label', 'Add label']];
@@ -83,20 +83,28 @@ export function openBoardSettings(blockId) {
 }
 
 // ---------- blocks ----------
+// A block holds tasks and can be looked at three ways: as a list, a board or
+// a calendar. Switching the view never moves or loses anything; a block that
+// has columns keeps them, and its list view groups tasks under them.
+let dragCol = null; // { blockId, colId } while a column is being dragged
+let dragBlock = null; // id of the block being dragged
+
+const viewOf = (block) => block.view || (block.type === 'board' ? 'board' : 'list');
+const saveCols = (block, columns) => op('block.save', { id: block.id, columns });
+
+function setView(block, view) {
+  if (view === 'board' && block.type !== 'board') return op('block.save', { id: block.id, type: 'board', view });
+  return op('block.save', { id: block.id, view });
+}
+
 function blockMenu(e, block) {
   const sections = sel.sections(block.domainId);
-  const all = sel.blocks(block.domainId);
-  const peers = all.filter((b) => (b.sectionId || null) === (block.sectionId || null));
-  const idx = peers.findIndex((b) => b.id === block.id);
-  const swap = (j) => { const ids = all.map((b) => b.id); const a = ids.indexOf(block.id); const b = ids.indexOf(peers[j].id); [ids[a], ids[b]] = [ids[b], ids[a]]; op('block.reorder', { ids }); };
   const count = sel.blockTasks(block.id).length;
   openMenu(e, [
     { label: 'Rename', icon: 'edit', fn: async () => { const name = await askText({ title: 'Rename block', value: block.name }); if (name) op('block.save', { id: block.id, name }); } },
+    { label: block.description ? 'Edit description' : 'Add a description', icon: 'note', fn: async () => { const d = await askText({ title: 'Description', label: block.name, value: block.description || '', placeholder: 'e.g. Deadline: 29 October', multiline: true, allowEmpty: true }); if (d !== null) op('block.save', { id: block.id, description: d }); } },
     block.type === 'board' ? { label: 'Rules and columns', icon: 'bolt', fn: () => openBoardSettings(block.id) } : null,
     block.type === 'list' ? { label: block.sort === 'priority' ? 'Sort by hand' : 'Sort by priority', icon: 'flag', fn: () => op('block.save', { id: block.id, sort: block.sort === 'priority' ? 'manual' : 'priority' }) } : null,
-    { label: block.type === 'board' ? 'Show as a list' : 'Show as a board', icon: block.type === 'board' ? 'list' : 'board', fn: () => op('block.save', { id: block.id, type: block.type === 'board' ? 'list' : 'board' }) },
-    idx > 0 ? { label: 'Move up', icon: 'arrowUp', fn: () => swap(idx - 1) } : null,
-    idx < peers.length - 1 ? { label: 'Move down', icon: 'arrowDown', fn: () => swap(idx + 1) } : null,
     sections.length ? { sep: true } : null,
     sections.length ? { heading: 'Section' } : null,
     sections.length ? { label: 'No section', active: !block.sectionId, fn: () => op('block.save', { id: block.id, sectionId: null }) } : null,
@@ -107,29 +115,38 @@ function blockMenu(e, block) {
 }
 
 function BlockHead({ block, count }) {
-  return html`<div class="block-head">
-    <${Icon} name=${block.type === 'board' ? 'board' : 'list'} size=${16} />
-    <h3>${block.name}</h3>
-    <span class="kind">${block.type === 'board' ? 'Board' : 'List'}</span>
-    <span class="faint">${count}</span>
-    <span class="grow"></span>
-    ${block.type === 'board' ? html`<button class="btn small ghost" onClick=${() => openBoardSettings(block.id)}><${Icon} name="bolt" size=${14} /> Rules</button>` : null}
-    <button class="icon-btn small" aria-label="Block actions" onClick=${(e) => blockMenu(e, block)}><${Icon} name="more" size=${16} /></button>
+  const view = viewOf(block);
+  return html`<div class="block-head-wrap">
+    <div class="block-head" draggable="true" title="Drag to move this block"
+      onDragStart=${(e) => { dragBlock = block.id; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'block'); }}
+      onDragEnd=${() => { dragBlock = null; }}>
+      <h3>${block.name}</h3>
+      <span class="faint">${count}</span>
+      <span class="grow"></span>
+      <div class="seg view-seg" role="group" aria-label="View">
+        <button class=${view === 'list' ? 'on' : ''} aria-pressed=${view === 'list'} onClick=${() => setView(block, 'list')}><${Icon} name="list" size=${14} />List</button>
+        <button class=${view === 'board' ? 'on' : ''} aria-pressed=${view === 'board'} onClick=${() => setView(block, 'board')}><${Icon} name="board" size=${14} />Board</button>
+        <button class=${view === 'calendar' ? 'on' : ''} aria-pressed=${view === 'calendar'} onClick=${() => setView(block, 'calendar')}><${Icon} name="calendar" size=${14} />Calendar</button>
+      </div>
+      ${block.type === 'board' ? html`<button class="btn small ghost" onClick=${() => openBoardSettings(block.id)}><${Icon} name="bolt" size=${14} /> Rules</button>` : null}
+      <button class="icon-btn small" aria-label="Block actions" onClick=${(e) => blockMenu(e, block)}><${Icon} name="more" size=${16} /></button>
+    </div>
+    ${block.description ? html`<div class="block-desc">${rich(block.description)}</div>` : null}
   </div>`;
 }
 
-function ListBlock({ block }) {
+// ----- list view -----
+function PlainList({ block }) {
   const all = sel.blockTasks(block.id);
   const open = all.filter((t) => !t.completedAt);
   const done = all.filter((t) => t.completedAt).sort((a, b) => b.completedAt - a.completedAt);
   const [showDone, setShowDone] = useState(false);
   const [over, setOver] = useState(false);
   const rows = block.sort === 'priority' ? open.slice().sort(domainCompare) : open;
-  return html`<div class=${'block' + (over ? ' drop' : '')}
+  return html`<div class=${'list-body' + (over ? ' drop' : '')}
     onDragOver=${(e) => { if (getDragId()) { e.preventDefault(); setOver(true); } }}
     onDragLeave=${() => setOver(false)}
     onDrop=${(e) => { setOver(false); const id = getDragId(); if (!id) return; e.preventDefault(); setDragId(null); op('task.move', { id, blockId: block.id }); }}>
-    <${BlockHead} block=${block} count=${open.length} />
     <div class="task-list">${rows.map((t) => html`<${TaskRow} key=${t.id} task=${t} ctx=${{ siblings: rows }} />`)}</div>
     <${AddTask} defaults=${{ blockId: block.id }} />
     ${done.length ? html`<button class="link-btn" onClick=${() => setShowDone(!showDone)}>${showDone ? 'Hide' : 'Show'} ${done.length} completed</button>` : null}
@@ -137,6 +154,32 @@ function ListBlock({ block }) {
   </div>`;
 }
 
+// The list view of a block that has columns: the same tasks, grouped.
+function ListGroup({ block, col, tasks }) {
+  const [over, setOver] = useState(false);
+  const isDone = col.role === 'done';
+  const [show, setShow] = useState(!isDone);
+  const rows = isDone ? tasks.slice().sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0)) : tasks;
+  return html`<div class=${'list-group' + (over ? ' drop' : '')}
+    onDragOver=${(e) => { if (getDragId()) { e.preventDefault(); setOver(true); } }}
+    onDragLeave=${() => setOver(false)}
+    onDrop=${(e) => { setOver(false); const id = getDragId(); if (!id) return; e.preventDefault(); setDragId(null); op('task.move', { id, blockId: block.id, columnId: col.id }); }}>
+    <button class="list-group-head" aria-expanded=${show} onClick=${() => setShow(!show)}>
+      <span class=${'twist' + (show ? ' open' : '')}><${Icon} name="chevron" size=${14} /></span>
+      <span class="list-group-name">${col.name}</span><span class="faint">${tasks.length}</span>
+    </button>
+    ${show ? html`<div class="task-list">${rows.slice(0, isDone ? 30 : rows.length).map((t) => html`<${TaskRow} key=${t.id} task=${t} ctx=${{ siblings: rows }} />`)}</div>` : null}
+    ${show && !isDone ? html`<${AddTask} defaults=${{ blockId: block.id, columnId: col.id }} />` : null}
+  </div>`;
+}
+function GroupedList({ block }) {
+  const tasks = sel.blockTasks(block.id);
+  const cols = block.columns || [];
+  const known = new Set(cols.map((c) => c.id));
+  return html`<div class="list-body">${cols.map((c, i) => html`<${ListGroup} key=${c.id} block=${block} col=${c} tasks=${tasks.filter((t) => t.columnId === c.id || (i === 0 && !known.has(t.columnId)))} />`)}</div>`;
+}
+
+// ----- board view -----
 // Subtasks stay folded on a card until you open them.
 const openCards = new Set(JSON.parse(localStorage.getItem('lb.openCards') || '[]'));
 function toggleCard(id) {
@@ -144,73 +187,159 @@ function toggleCard(id) {
   localStorage.setItem('lb.openCards', JSON.stringify([...openCards]));
   notify();
 }
+function Tags({ labels }) {
+  if (!labels || !labels.length) return null;
+  return html`<div class="tags">${labels.map((l) => html`<span class="tag" key=${l}><${Icon} name="label" size=${11} />${l}</span>`)}</div>`;
+}
 function CardSubs({ parentId, depth = 0 }) {
   return sel.children(parentId).map((k) => html`<div key=${k.id}>
-    <div class=${'card-sub' + (k.completedAt ? ' is-done' : '')} style=${{ paddingLeft: depth * 16 + 'px' }} onClick=${(e) => { e.stopPropagation(); openTask(k.id); }}>
-      <${Check} task=${k} small=${true} />
-      <span class="grow">${k.title}${(k.labels || []).map((l) => html` <span class="chip label">@${l}</span>`)}</span>
+    <div class=${'card-sub' + (k.completedAt ? ' is-done' : '')} style=${{ paddingLeft: 10 + depth * 18 + 'px' }} onClick=${(e) => { e.stopPropagation(); openTask(k.id); }}>
+      <${Check} task=${k} />
+      <div class="grow"><div class="card-sub-title">${rich(k.title)}</div><${Tags} labels=${k.labels} /></div>
     </div>
     <${CardSubs} parentId=${k.id} depth=${depth + 1} />
   </div>`);
 }
-function Card({ task: t, block }) {
+function Card({ task: t }) {
   const [over, setOver] = useState(null);
   const prog = sel.progress(t.id);
   const open = openCards.has(t.id);
   return html`<div class=${'card' + (t.completedAt ? ' is-done' : '') + (over ? ' drop-' + over : '')} draggable="true" tabindex="0"
-    onDragStart=${(e) => { setDragId(t.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', t.id); }}
+    onDragStart=${(e) => { setDragId(t.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', t.id); e.stopPropagation(); }}
     onDragEnd=${() => setDragId(null)}
     onDragOver=${(e) => { const id = getDragId(); if (id && id !== t.id) { e.preventDefault(); e.stopPropagation(); setOver(dropZone(e)); } }}
     onDragLeave=${() => setOver(null)}
-    onDrop=${(e) => { setOver(null); const id = getDragId(); if (!id || id === t.id) return; e.preventDefault(); e.stopPropagation(); setDragId(null); const zone = dropZone(e); if (zone === 'child') { openCards.add(t.id); } op('task.move', dropArgs(zone, id, t)); }}
-    onClick=${() => openTask(t.id)} onKeyDown=${(e) => { if (e.key === 'Enter') openTask(t.id); }}>
-    <div class="card-top">
-      <${Check} task=${t} small=${true} />
-      <span class="card-title">${t.title}${t.description ? html`<span class="card-desc">${t.description}</span>` : null}</span>
-      <button class="icon-btn small card-more" aria-label="More actions" onClick=${(e) => { e.stopPropagation(); taskMenu(e, t); }}><${Icon} name="more" size=${14} /></button>
+    onDrop=${(e) => { setOver(null); const id = getDragId(); if (!id || id === t.id) return; e.preventDefault(); e.stopPropagation(); setDragId(null); const zone = dropZone(e); if (zone === 'child') openCards.add(t.id); op('task.move', dropArgs(zone, id, t)); }}
+    onClick=${() => openTask(t.id)} onKeyDown=${(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) openTask(t.id); }}>
+    <div class="card-main">
+      <div class="card-top">
+        <${Check} task=${t} />
+        <div class="card-text">
+          <div class="card-title">${rich(t.title)}</div>
+          ${t.description ? html`<div class="card-desc">${t.description}</div>` : null}
+        </div>
+        <button class="icon-btn small card-more" aria-label="More actions" onClick=${(e) => { e.stopPropagation(); taskMenu(e, t); }}><${Icon} name="more" size=${14} /></button>
+      </div>
+      <div class="card-meta">
+        ${prog.total ? html`<button class=${'chip sub-toggle' + (open ? ' open' : '')} aria-expanded=${open} title=${open ? 'Hide subtasks' : 'Show subtasks'} onClick=${(e) => { e.stopPropagation(); toggleCard(t.id); }}><${Icon} name="sub" size=${13} />${prog.done}/${prog.total}<${Icon} name="down" size=${12} /></button>` : null}
+        <${Meta} task=${t} hideSubs=${true} />
+      </div>
+      ${t.stopNote && !t.completedAt ? html`<div class="stop-note"><${Icon} name="note" size=${13} />${t.stopNote}</div>` : null}
     </div>
-    <div class="card-meta">
-      <span class="chip"><span class="dot" style=${{ background: PRIORITY_COLORS[t.priority || 4] }}></span>P${t.priority || 4}</span>
-      ${prog.total ? html`<button class=${'chip sub-toggle' + (open ? ' open' : '')} aria-expanded=${open} title=${open ? 'Hide subtasks' : 'Show subtasks'} onClick=${(e) => { e.stopPropagation(); toggleCard(t.id); }}><${Icon} name="sub" size=${13} />${prog.done}/${prog.total}<${Icon} name="down" size=${12} /></button>` : null}
-      <${Meta} task=${t} hideSubs=${true} />
-    </div>
-    ${prog.total && !open ? html`<div class="bar thin"><span style=${{ width: Math.round((prog.done / prog.total) * 100) + '%' }}></span></div>` : null}
     ${open ? html`<div class="card-subs"><${CardSubs} parentId=${t.id} /></div>` : null}
-    ${t.stopNote && !t.completedAt ? html`<div class="stop-note"><${Icon} name="note" size=${13} />${t.stopNote}</div>` : null}
   </div>`;
 }
 
+function colMenu(e, block, col) {
+  const cols = block.columns || [];
+  const i = cols.findIndex((c) => c.id === col.id);
+  const move = (j) => { const n = cols.slice(); const [m] = n.splice(i, 1); n.splice(j, 0, m); saveCols(block, n); };
+  openMenu(e, [
+    { label: 'Rename', icon: 'edit', fn: async () => { const name = await askText({ title: 'Rename column', value: col.name }); if (name) saveCols(block, cols.map((c) => (c.id === col.id ? { ...c, name } : c))); } },
+    i > 0 ? { label: 'Move left', icon: 'arrowUp', fn: () => move(i - 1) } : null,
+    i < cols.length - 1 ? { label: 'Move right', icon: 'arrowDown', fn: () => move(i + 1) } : null,
+    { label: 'Rules for this board', icon: 'bolt', fn: () => openBoardSettings(block.id) },
+    { sep: true },
+    { heading: 'This column is' },
+    ...ROLES.map(([v, l]) => ({ label: l, active: (col.role || '') === v, fn: () => saveCols(block, cols.map((c) => (c.id === col.id ? { ...c, role: v || null } : c))) })),
+    cols.length > 1 ? { sep: true } : null,
+    cols.length > 1 ? { label: 'Delete column', icon: 'trash', danger: true, fn: async () => { if (await askConfirm({ title: 'Delete column', text: `Cards in "${col.name}" move to "${cols.find((c) => c.id !== col.id).name}".`, confirm: 'Delete column' })) saveCols(block, cols.filter((c) => c.id !== col.id)); } } : null,
+  ]);
+}
+
 function Column({ block, col, tasks }) {
-  const [over, setOver] = useState(false);
+  const [over, setOver] = useState(null);
   const [all, setAll] = useState(false);
   const rules = sel.rules(block.id).filter((r) => r.to === col.id && r.enabled !== false);
   const isDone = col.role === 'done';
   const list = isDone ? tasks.slice().sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0)) : tasks;
   const shown = isDone && !all ? list.slice(0, 6) : list;
-  return html`<div class=${'col' + (over ? ' drop' : '')}
-    onDragOver=${(e) => { if (getDragId()) { e.preventDefault(); e.stopPropagation(); setOver(true); } }}
-    onDragLeave=${() => setOver(false)}
-    onDrop=${(e) => { setOver(false); const id = getDragId(); if (!id) return; e.preventDefault(); e.stopPropagation(); setDragId(null); op('task.move', { id, blockId: block.id, columnId: col.id }); }}>
-    <div class="col-head"><span>${col.name}</span><span class="faint">${tasks.length}</span></div>
+  return html`<div class=${'col' + (over ? ' drop-' + over : '')}
+    onDragOver=${(e) => {
+      if (dragCol) { if (dragCol.blockId === block.id && dragCol.colId !== col.id) { e.preventDefault(); e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setOver(e.clientX > r.left + r.width / 2 ? 'right' : 'left'); } return; }
+      if (getDragId()) { e.preventDefault(); e.stopPropagation(); setOver('task'); }
+    }}
+    onDragLeave=${() => setOver(null)}
+    onDrop=${(e) => {
+      setOver(null);
+      if (dragCol) {
+        if (dragCol.blockId !== block.id || dragCol.colId === col.id) return;
+        e.preventDefault(); e.stopPropagation();
+        const cols = (block.columns || []).slice();
+        const [moved] = cols.splice(cols.findIndex((c) => c.id === dragCol.colId), 1);
+        const r = e.currentTarget.getBoundingClientRect();
+        cols.splice(cols.findIndex((c) => c.id === col.id) + (e.clientX > r.left + r.width / 2 ? 1 : 0), 0, moved);
+        dragCol = null;
+        saveCols(block, cols);
+        return;
+      }
+      const id = getDragId(); if (!id) return;
+      e.preventDefault(); e.stopPropagation(); setDragId(null);
+      op('task.move', { id, blockId: block.id, columnId: col.id });
+    }}>
+    <div class="col-head" draggable="true" title="Drag to reorder columns"
+      onDragStart=${(e) => { dragCol = { blockId: block.id, colId: col.id }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'column'); e.stopPropagation(); }}
+      onDragEnd=${() => { dragCol = null; }}>
+      <span class="col-name">${col.name}</span><span class="faint">${tasks.length}</span><span class="grow"></span>
+      <button class="icon-btn small" aria-label=${'Column actions: ' + col.name} onClick=${(e) => colMenu(e, block, col)}><${Icon} name="more" size=${16} /></button>
+    </div>
     ${rules.map((r) => html`<button class="rule-badge" key=${r.id} title="Edit rules" onClick=${() => openBoardSettings(block.id)}><${Icon} name="bolt" size=${12} /><span>On entry: ${ruleSummary(r)}</span></button>`)}
     <div class="cards">
-      ${shown.map((t) => html`<${Card} key=${t.id} task=${t} block=${block} />`)}
-      ${!tasks.length ? html`<div class="col-empty">Drop a card here</div>` : null}
+      ${shown.map((t) => html`<${Card} key=${t.id} task=${t} />`)}
       ${isDone && list.length > 6 ? html`<button class="link-btn" onClick=${() => setAll(!all)}>${all ? 'Show fewer' : `Show all ${list.length}`}</button>` : null}
     </div>
-    ${isDone ? null : html`<${AddTask} defaults=${{ blockId: block.id, columnId: col.id }} label="Add card" placeholder="Card title" />`}
+    <${AddTask} defaults=${{ blockId: block.id, columnId: col.id }} label="Add task" placeholder="Task name" />
   </div>`;
 }
 
-function BoardBlock({ block }) {
+function BoardBody({ block }) {
   const tasks = sel.blockTasks(block.id);
   const cols = block.columns || [];
   const known = new Set(cols.map((c) => c.id));
-  return html`<div class="block">
-    <${BlockHead} block=${block} count=${tasks.filter((t) => !t.completedAt).length} />
-    <div class="board">
-      ${cols.map((c, i) => html`<${Column} key=${c.id} block=${block} col=${c} tasks=${tasks.filter((t) => t.columnId === c.id || (i === 0 && !known.has(t.columnId)))} />`)}
+  const addCol = async () => { const name = await askText({ title: 'New column', placeholder: 'e.g. Review', confirm: 'Add' }); if (name) saveCols(block, [...cols, { id: 'c' + Date.now().toString(36), name, role: null }]); };
+  return html`<div class="board">
+    ${cols.map((c, i) => html`<${Column} key=${c.id} block=${block} col=${c} tasks=${tasks.filter((t) => t.columnId === c.id || (i === 0 && !known.has(t.columnId)))} />`)}
+    <button class="add-col" onClick=${addCol}><${Icon} name="plus" size=${15} />Add column</button>
+  </div>`;
+}
+
+// ----- calendar view -----
+function BlockCalendar({ block }) {
+  const [month, setMonth] = useState(state.today.slice(0, 7));
+  const mine = (t) => t.blockId === block.id;
+  const undated = sel.open().filter((t) => mine(t) && !t.due && !t.deadline && !t.parentId).length;
+  const [y, m] = month.split('-').map(Number);
+  return html`<div class="block-cal">
+    <div class="block-cal-head">
+      <strong>${MONTH_NAMES[m - 1]} ${y}</strong>
+      <div class="seg"><button aria-label="Previous month" onClick=${() => setMonth(addMonths(month + '-01', -1).slice(0, 7))}>‹</button><button onClick=${() => setMonth(state.today.slice(0, 7))}>Today</button><button aria-label="Next month" onClick=${() => setMonth(addMonths(month + '-01', 1).slice(0, 7))}>›</button></div>
+      <span class="grow"></span>
+      ${undated ? html`<span class="faint">${undated} task${undated === 1 ? '' : 's'} here ${undated === 1 ? 'has' : 'have'} no date, so ${undated === 1 ? 'it is' : 'they are'} not shown.</span>` : null}
     </div>
+    <${MonthGrid} month=${month} filter=${mine} plain=${true} />
+  </div>`;
+}
+
+function Block({ block }) {
+  const view = viewOf(block);
+  const [over, setOver] = useState(false);
+  const count = sel.blockTasks(block.id).filter((t) => !t.completedAt).length;
+  return html`<div class=${'block view-' + view + (over ? ' drop-block' : '')}
+    onDragOver=${(e) => { if (dragBlock && dragBlock !== block.id) { e.preventDefault(); setOver(true); } }}
+    onDragLeave=${() => setOver(false)}
+    onDrop=${(e) => {
+      setOver(false);
+      if (!dragBlock || dragBlock === block.id) return;
+      e.preventDefault();
+      const ids = sel.blocks(block.domainId).map((b) => b.id).filter((id) => id !== dragBlock);
+      ids.splice(ids.indexOf(block.id), 0, dragBlock);
+      const moved = sel.block(dragBlock);
+      const id = dragBlock;
+      dragBlock = null;
+      (async () => { if (moved && (moved.sectionId || null) !== (block.sectionId || null)) await op('block.save', { id, sectionId: block.sectionId || null }); await op('block.reorder', { ids }); })();
+    }}>
+    <${BlockHead} block=${block} count=${count} />
+    ${view === 'calendar' ? html`<${BlockCalendar} block=${block} />` : view === 'board' ? html`<${BoardBody} block=${block} />` : block.type === 'board' ? html`<${GroupedList} block=${block} />` : html`<${PlainList} block=${block} />`}
   </div>`;
 }
 
@@ -219,8 +348,12 @@ function AddBlock({ domainId, sectionId }) {
     const name = await askText({ title: type === 'board' ? 'New board' : 'New list', placeholder: type === 'board' ? 'e.g. Assets' : 'e.g. Resources to consume', confirm: 'Create' });
     if (name) op('block.save', { domainId, sectionId: sectionId || null, name, type });
   };
-  return html`<div class="add-block">
-    <span class="faint">Add a block here</span>
+  const [over, setOver] = useState(false);
+  return html`<div class=${'add-block' + (over ? ' drop' : '')}
+    onDragOver=${(e) => { if (dragBlock) { e.preventDefault(); setOver(true); } }}
+    onDragLeave=${() => setOver(false)}
+    onDrop=${(e) => { setOver(false); if (!dragBlock) return; e.preventDefault(); const id = dragBlock; dragBlock = null; const ids = sel.blocks(domainId).map((b) => b.id).filter((x) => x !== id); ids.push(id); (async () => { await op('block.save', { id, sectionId: sectionId || null }); await op('block.reorder', { ids }); })(); }}>
+    <span class="faint">Add a block here, or drop one</span>
     <button class="btn small" onClick=${() => add('list')}><${Icon} name="list" size=${14} /> List</button>
     <button class="btn small" onClick=${() => add('board')}><${Icon} name="board" size=${14} /> Board</button>
   </div>`;
@@ -252,15 +385,15 @@ export function DomainView({ id }) {
   const actual = tbs.reduce((n, b) => n + (b.actualMin || 0), 0);
   const plan = sel.plan(state.today);
   const floorHere = (plan.floor || []).map(sel.task).filter((t) => t && t.domainId === id && isOpen(t)).length;
-  const renderBlock = (b) => (b.type === 'board' ? html`<${BoardBlock} key=${b.id} block=${b} />` : html`<${ListBlock} key=${b.id} block=${b} />`);
+  const renderBlock = (b) => html`<${Block} key=${b.id} block=${b} />`;
   return html`<div class="page wide">
     <header class="page-head">
       <div>
         <h1><span class="dot big" style=${{ background: d.color }}></span>${d.name}</h1>
-        <div class="muted">Priorities here only rank tasks inside ${d.name}. The Today view uses the domain's weight first.</div>
+        <div class="muted">Priorities here only rank tasks inside ${d.name}. The Today view uses the domain's severity first.</div>
       </div>
       <div class="head-actions">
-        <label class="weight" title="Higher weight puts this domain's tasks first in Today">Weight
+        <label class="weight" title="Higher severity puts this domain's tasks first in Today">Severity
           <div class="seg">${[1, 2, 3, 4, 5].map((w) => html`<button class=${d.weight === w ? 'on' : ''} onClick=${() => op('domain.save', { id: d.id, weight: w })}>${w}</button>`)}</div>
         </label>
         <button class="icon-btn" aria-label="Domain actions" onClick=${(e) => domainMenu(e, d)}><${Icon} name="more" /></button>

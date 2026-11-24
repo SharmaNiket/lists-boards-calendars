@@ -305,6 +305,7 @@ export function createOps(store, clock = {}) {
         changed = true;
       }
     }
+    for (const s of store.all('series')) if (fillSeries(s)) changed = true;
     const cutoff = now - TRASH_DAYS * 864e5;
     for (const t of store.all('tasks')) {
       if (t.deletedAt && t.deletedAt < cutoff) {
@@ -356,6 +357,36 @@ export function createOps(store, clock = {}) {
     b.needsNote = false;
     store.put('timeblocks', b);
   }
+  // ----- repeating time blocks -----
+  // A series is the recipe; real blocks are made from it a few weeks ahead,
+  // so each one can be moved, changed or removed without touching the rest.
+  const SERIES_DAYS = 35;
+  function fillSeries(s) {
+    const day = today();
+    const from = day > s.from ? day : s.from;
+    const made = new Set(s.made || []);
+    let changed = false;
+    for (const d of between(s.recur, s.from, from, addDays(day, SERIES_DAYS), 80)) {
+      if (made.has(d)) continue;
+      const b = { id: newId(), status: 'planned', createdAt: nowMs(), seriesId: s.id, date: d, start: s.start, len: s.len, domainId: s.domainId || null, taskId: s.taskId || null, hardStop: !!s.hardStop, customTitle: s.customTitle || '' };
+      b.title = b.customTitle || blockTitle(b);
+      store.put('timeblocks', b);
+      made.add(d);
+      changed = true;
+    }
+    const keep = [...made].filter((d) => d >= addDays(day, -2)).sort();
+    if (changed || keep.length !== (s.made || []).length) {
+      s.made = keep;
+      store.put('series', s);
+    }
+    return changed;
+  }
+  const laterPlanned = (seriesId, after) => store.all('timeblocks').filter((b) => b.seriesId === seriesId && b.status === 'planned' && b.date > after);
+  function copyShape(from, to) {
+    for (const k of ['start', 'len', 'domainId', 'taskId', 'hardStop', 'customTitle']) to[k] = from[k] ?? null;
+    to.hardStop = !!from.hardStop;
+  }
+
   function blockTitle(b) {
     if (b.taskId) return store.get('tasks', b.taskId)?.title || 'Task';
     if (b.domainId) return store.get('domains', b.domainId)?.name || 'Block';
@@ -442,7 +473,7 @@ export function createOps(store, clock = {}) {
       if (a.id && store.get('blocks', a.id)) {
         const b = store.get('blocks', a.id);
         const wasBoard = b.type === 'board';
-        for (const k of ['name', 'sectionId', 'position', 'collapsed', 'sort']) if (k in a) b[k] = a[k];
+        for (const k of ['name', 'sectionId', 'position', 'collapsed', 'sort', 'description', 'view']) if (k in a) b[k] = a[k];
         if (a.type && a.type !== b.type) {
           b.type = a.type;
           if (b.type === 'board') {
@@ -477,7 +508,7 @@ export function createOps(store, clock = {}) {
         return store.put('blocks', b);
       }
       need('domains', a.domainId);
-      const b = { id: newId(), domainId: a.domainId, sectionId: a.sectionId || null, name: (a.name || (a.type === 'board' ? 'Board' : 'List')).trim(), type: a.type === 'board' ? 'board' : 'list', position: endPos(store.all('blocks').filter((x) => x.domainId === a.domainId)), columns: [] };
+      const b = { id: newId(), domainId: a.domainId, sectionId: a.sectionId || null, name: (a.name || (a.type === 'board' ? 'Board' : 'List')).trim(), description: a.description || '', type: a.type === 'board' ? 'board' : 'list', position: endPos(store.all('blocks').filter((x) => x.domainId === a.domainId)), columns: [] };
       if (b.type === 'board') b.columns = a.columns && a.columns.length ? a.columns.map((c) => ({ id: newId(), name: c.name, role: c.role || null })) : defaults();
       store.put('blocks', b);
       if (b.type === 'board') defaultRules(b);
@@ -777,9 +808,57 @@ export function createOps(store, clock = {}) {
       }
       if ('title' in a) b.customTitle = a.title || '';
       b.title = b.customTitle || blockTitle(b);
-      return store.put('timeblocks', b);
+      store.put('timeblocks', b);
+      if ('recur' in a) {
+        const rule = a.recur ? (typeof a.recur === 'string' ? parseRecur(a.recur) : a.recur) : null;
+        if (a.recur && !rule) throw new Error('I can\u2019t read that repeat rule. Try "every weekday" or "every mon, thu".');
+        const old = b.seriesId ? store.get('series', b.seriesId) : null;
+        if (old) {
+          // The series changes from this block onward; earlier blocks stay as they were.
+          for (const o of laterPlanned(old.id, b.date)) store.del('timeblocks', o.id);
+          for (const o of store.all('timeblocks')) {
+            if (o.seriesId === old.id && o.id !== b.id) {
+              o.seriesId = null;
+              store.put('timeblocks', o);
+            }
+          }
+          store.del('series', old.id);
+          b.seriesId = null;
+        }
+        if (rule) {
+          const s = { id: newId(), recur: { freq: rule.freq, interval: Math.max(1, +rule.interval || 1), days: rule.days || [], monthDay: rule.monthDay || null, times: [], from: 'schedule' }, from: b.date, made: [b.date] };
+          copyShape(b, s);
+          store.put('series', s);
+          b.seriesId = s.id;
+          fillSeries(s);
+        }
+        store.put('timeblocks', b);
+      } else if (a.scope === 'series' && b.seriesId && store.get('series', b.seriesId)) {
+        const s = store.get('series', b.seriesId);
+        copyShape(b, s);
+        store.put('series', s);
+        for (const o of laterPlanned(s.id, b.date)) {
+          copyShape(b, o);
+          o.title = o.customTitle || blockTitle(o);
+          store.put('timeblocks', o);
+        }
+      }
+      return b;
     },
-    'tb.delete'({ id }) {
+    // scope 'series' removes this block and every later one that has not started.
+    'tb.delete'({ id, scope }) {
+      const b = store.get('timeblocks', id);
+      if (!b) return;
+      if (scope === 'series' && b.seriesId) {
+        for (const o of laterPlanned(b.seriesId, b.date)) store.del('timeblocks', o.id);
+        for (const o of store.all('timeblocks')) {
+          if (o.seriesId === b.seriesId && o.id !== b.id) {
+            o.seriesId = null;
+            store.put('timeblocks', o);
+          }
+        }
+        store.del('series', b.seriesId);
+      }
       store.del('timeblocks', id);
     },
     'tb.start'({ id }) {
@@ -843,6 +922,9 @@ export function createOps(store, clock = {}) {
           if (recur && !stale && src.dueTime && t.dueTime !== src.dueTime) {
             t.dueTime = src.dueTime;
           }
+          for (const c of src.comments || []) {
+            if (c && c.text) store.put('comments', { id: newId(), taskId: t.id, text: String(c.text), at: c.at || nowMs() });
+          }
           t.sourceId = src.sourceId || null;
           t.source = data.source || 'import';
           store.put('tasks', t);
@@ -854,8 +936,14 @@ export function createOps(store, clock = {}) {
       };
       const findBlock = (domain, sectionId, spec) => {
         const hit = store.all('blocks').find((b) => b.domainId === domain.id && (b.sectionId || null) === (sectionId || null) && same(b.name, spec.name));
-        if (hit) return hit;
-        return ops['block.save']({ domainId: domain.id, sectionId, name: spec.name, type: spec.type === 'board' ? 'board' : 'list', columns: spec.columns });
+        if (hit) {
+          if (spec.description && !hit.description) {
+            hit.description = spec.description;
+            store.put('blocks', hit);
+          }
+          return hit;
+        }
+        return ops['block.save']({ domainId: domain.id, sectionId, name: spec.name, description: spec.description || '', type: spec.type === 'board' ? 'board' : 'list', columns: spec.columns });
       };
       const fillBlock = (block, spec) => {
         for (const src of spec.tasks || []) {

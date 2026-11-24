@@ -10,7 +10,7 @@ function setup(day = '2026-11-11', minute = 600) {
   const store = new Store(':memory:');
   const ops = createOps(store, { today: () => clock.day, nowMin: () => clock.minute, now: () => clock.ms });
   const run = (name, args) => ops.run(name, args);
-  const domain = run('domain.save', { name: 'Game Dev', weight: 3 }).result;
+  const domain = run('domain.save', { name: 'Projects', weight: 3 }).result;
   const board = run('block.save', { domainId: domain.id, name: 'Combat', type: 'board' }).result;
   const col = (role) => board.columns.find((c) => c.role === role).id;
   const task = (id) => store.get('tasks', id);
@@ -50,7 +50,7 @@ test('In Progress stamps a start date, Done completes, leaving Done reopens', ()
 
 test('a parent completes itself when its nested subtasks are done, and reopens when work is added', () => {
   const { run, domain, task } = setup();
-  const parent = run('task.add', { title: 'Review UAT report', domainId: domain.id }).result;
+  const parent = run('task.add', { title: 'Review the quarterly report', domainId: domain.id }).result;
   const a = run('task.add', { title: 'Collect failures', parentId: parent.id }).result;
   const b = run('task.add', { title: 'Re-test devices', parentId: parent.id }).result;
   const b1 = run('task.add', { title: 'Log models', parentId: b.id }).result;
@@ -132,7 +132,7 @@ test('time blocks: project-level, hard stop, planned against actual', () => {
   const { clock, run, ops, store, domain } = setup('2026-11-11', 600);
   const b = run('tb.save', { date: '2026-11-11', start: 600, len: 90, domainId: domain.id, hardStop: true }).result;
   assert.equal(b.taskId, undefined);
-  assert.equal(b.title, 'Game Dev');
+  assert.equal(b.title, 'Projects');
   run('tb.start', { id: b.id });
   const t = run('task.add', { title: 'Parry timing', domainId: domain.id }).result;
   run('tb.save', { id: b.id, taskId: t.id });
@@ -182,18 +182,18 @@ test('sync returns only what changed', () => {
 test('calendar feed: time zones, weekly repeats, exceptions and all-day events', () => {
   const ics = [
     'BEGIN:VCALENDAR',
-    'BEGIN:VEVENT', 'UID:standup', 'SUMMARY:Standup', 'DTSTART;TZID=Asia/Kolkata:20261102T100000', 'DTEND;TZID=Asia/Kolkata:20261102T103000', 'RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR', 'EXDATE;TZID=Asia/Kolkata:20261113T100000', 'END:VEVENT',
+    'BEGIN:VEVENT', 'UID:standup', 'SUMMARY:Standup', 'DTSTART;TZID=Asia/Dubai:20261102T100000', 'DTEND;TZID=Asia/Dubai:20261102T103000', 'RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR', 'EXDATE;TZID=Asia/Dubai:20261113T100000', 'END:VEVENT',
     'BEGIN:VEVENT', 'UID:sync', 'SUMMARY:US sync', 'DTSTART:20261111T153000Z', 'DTEND:20261111T163000Z', 'END:VEVENT',
     'BEGIN:VEVENT', 'UID:holiday', 'SUMMARY:Holiday', 'DTSTART;VALUE=DATE:20261112', 'DTEND;VALUE=DATE:20261113', 'END:VEVENT',
     'BEGIN:VEVENT', 'UID:gone', 'SUMMARY:Cancelled', 'STATUS:CANCELLED', 'DTSTART:20261111T100000Z', 'DTEND:20261111T110000Z', 'END:VEVENT',
     'END:VCALENDAR',
   ].join('\r\n');
-  const events = expandEvents(parseIcs(ics, 'Asia/Kolkata'), '2026-11-09', '2026-11-15', 'Asia/Kolkata');
+  const events = expandEvents(parseIcs(ics, 'Asia/Dubai'), '2026-11-09', '2026-11-15', 'Asia/Dubai');
   const brief = events.map((e) => `${e.date} ${e.title} ${e.allDay ? 'all-day' : e.startMin + '-' + e.endMin}`);
   assert.deepEqual(brief, [
     '2026-11-09 Standup 600-630',
     '2026-11-11 Standup 600-630',
-    '2026-11-11 US sync 1260-1320',
+    '2026-11-11 US sync 1170-1230',
     '2026-11-12 Holiday all-day',
   ]);
 });
@@ -217,7 +217,7 @@ test('import merges by name, keeps hierarchy, skips what it has seen, and fires 
   const file = {
     format: 'lists-boards-import', source: 'todoist', dropEmptyDomains: ['Nowhere'],
     domains: [
-      { name: 'game dev', blocks: [{ name: 'Combat', type: 'board', tasks: [
+      { name: 'projects', blocks: [{ name: 'Combat', type: 'board', tasks: [
         { sourceId: 's1', title: 'Sprint', column: 'To-Do', priority: 1, labels: ['Level Design'], children: [{ sourceId: 's2', title: 'Camera', children: [{ sourceId: 's3', title: 'Zoom' }] }] },
         { sourceId: 's4', title: 'Shipped', column: 'Done' },
       ] }] },
@@ -248,4 +248,37 @@ test('import merges by name, keeps hierarchy, skips what it has seen, and fires 
   assert.equal(again.added, 0);
   assert.equal(again.skipped, 7);
   assert.equal(store.all('tasks').length, 7);
+});
+
+test('repeating time blocks: made ahead, each one independent, series edit and stop', () => {
+  const { clock, run, ops, store, domain } = setup('2026-11-11', 600);
+  const blocks = () => store.all('timeblocks').sort((a, b) => a.date.localeCompare(b.date));
+  const b = run('tb.save', { date: '2026-11-11', start: 540, len: 90, domainId: domain.id, hardStop: true, recur: 'every weekday' }).result;
+  assert.ok(b.seriesId);
+  assert.deepEqual(blocks().slice(0, 4).map((x) => x.date), ['2026-11-11', '2026-11-12', '2026-11-13', '2026-11-16']);
+  const count = blocks().length;
+  assert.ok(count >= 25 && count <= 27, 'about five weeks of weekdays: ' + count);
+  // One block moved and one removed: neither comes back, the rest stay put.
+  const thu = blocks()[1];
+  run('tb.save', { id: thu.id, date: '2026-11-14', start: 600 });
+  run('tb.delete', { id: blocks().find((x) => x.date === '2026-11-13').id });
+  ops.maintenance();
+  assert.equal(blocks().filter((x) => x.date === '2026-11-12' || x.date === '2026-11-13').length, 0);
+  assert.equal(blocks().length, count - 1);
+  // Changing the whole series from one block onward.
+  const mon = blocks().find((x) => x.date === '2026-11-16');
+  run('tb.save', { id: mon.id, start: 480, len: 60, scope: 'series' });
+  assert.equal(blocks().find((x) => x.date === '2026-11-17').start, 480);
+  assert.equal(store.get('timeblocks', b.id).start, 540, 'earlier blocks are untouched');
+  // Time passing extends the series.
+  clock.day = '2026-11-18';
+  ops.maintenance();
+  assert.ok(blocks().some((x) => x.date === '2026-12-22'));
+  // Stopping it from one block removes the later ones only.
+  const wed = blocks().find((x) => x.date === '2026-11-18');
+  run('tb.delete', { id: wed.id, scope: 'series' });
+  assert.equal(blocks().filter((x) => x.date >= '2026-11-18').length, 0);
+  assert.equal(store.all('series').length, 0);
+  assert.ok(blocks().length >= 3);
+  assert.throws(() => run('tb.save', { date: '2026-11-18', start: 540, len: 30, recur: 'every blue moon' }));
 });

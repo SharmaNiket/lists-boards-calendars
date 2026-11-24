@@ -22,7 +22,7 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 export function seed(ops, store) {
   if (store.all('domains').length || store.get('settings', 'main')) return;
   ops.run('settings.save', {});
-  for (const [name, weight, color] of [['Office', 5, '#5b9cf5'], ['SDET', 4, '#4fb286'], ['Game Dev', 3, '#b48cf2'], ['Gym', 2, '#e8963a']]) {
+  for (const [name, weight, color] of [['Work', 5, '#5b9cf5'], ['Learning', 4, '#4fb286'], ['Projects', 3, '#b48cf2'], ['Personal', 2, '#e8963a']]) {
     ops.run('domain.save', { name, weight, color });
   }
   ops.run('filter.save', { name: 'Priority 1', query: 'p1' });
@@ -38,6 +38,26 @@ export function createApp({ dataFile, password = '', fetchImpl } = {}) {
   const calendars = new CalendarCache({ fetchImpl });
   seed(ops, store);
   ops.maintenance();
+  loadImports();
+
+  // An import file dropped into the data folder (anything ending in
+  // "-import.json") is loaded once at start-up, then renamed so it is not
+  // read again.
+  function loadImports() {
+    if (dataFile === ':memory:') return;
+    const dir = path.dirname(dataFile);
+    for (const name of fs.readdirSync(dir)) {
+      if (!/-import\.json$/.test(name)) continue;
+      const file = path.join(dir, name);
+      try {
+        const out = ops.run('import.merge', JSON.parse(fs.readFileSync(file, 'utf8'))).result;
+        fs.renameSync(file, file.replace(/\.json$/, '.loaded.json'));
+        console.log(`Imported ${name}: ${out.added} tasks added, ${out.skipped} already here.`);
+      } catch (err) {
+        console.error(`Could not import ${name}: ${err.message}`);
+      }
+    }
+  }
 
   const token = password ? crypto.createHmac('sha256', password).update('lists-and-boards').digest('hex') : '';
   const streams = new Set();

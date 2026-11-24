@@ -500,3 +500,58 @@ body.dragging-cal, body.dragging-cal * { cursor: grabbing !important; user-selec
   .tg-day { flex-direction: column; gap: 0; padding: 2px 0; }
   .tg-load { display: none; }
 }
+
+/* ---------- links ---------- */
+a.link { color: #8ab4f8; text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+a.link:hover { color: #b9d2fc; }
+.desc-view { min-height: 34px; padding: 7px 2px; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid transparent; border-radius: 8px; cursor: text; }
+.desc-view:hover, .desc-view:focus-visible { border-color: var(--line); }
+.desc-view:empty::before { content: "Description"; color: var(--faint); }
+
+/* ---------- blocks: head, views ---------- */
+.block-head-wrap { display: flex; flex-direction: column; gap: 2px; margin-bottom: 6px; }
+.block-head { cursor: grab; flex-wrap: wrap; margin-bottom: 0; }
+.block-head h3 { font-size: 17px; }
+.block-desc { color: var(--muted); font-size: 13px; white-space: pre-wrap; }
+.view-seg button { min-height: 26px; padding: 0 8px; font-size: 12px; }
+.block.drop-block { box-shadow: inset 0 3px 0 var(--accent); }
+.add-block.drop { border-color: var(--accent); background: var(--accent-soft); }
+.list-body { display: flex; flex-direction: column; gap: 4px; border-radius: 8px; }
+.list-body.drop { box-shadow: inset 0 0 0 1px var(--accent); }
+.list-group { border-radius: 8px; margin-bottom: 4px; }
+.list-group.drop { box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft); }
+.list-group-head { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 36px; font-weight: 700; font-size: 14px; border-bottom: 1px solid var(--line); }
+.list-group-head .twist { height: 22px; }
+.block-cal { display: flex; flex-direction: column; gap: 8px; }
+.block-cal-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.block-cal .cal-cell { min-height: 86px; }
+
+/* ---------- board: open columns, cards that hold their subtasks ---------- */
+.block.view-board { background: transparent; border-color: transparent; padding-left: 0; padding-right: 0; }
+.board { gap: 16px; padding: 2px 2px 10px; }
+.col { flex: 0 0 276px; max-width: none; background: transparent; border: 0; padding: 0; gap: 8px; min-height: 80px; border-radius: 10px; }
+.col.drop-task { background: var(--accent-soft); outline: 1px dashed var(--accent); outline-offset: 4px; }
+.col.drop-left { box-shadow: -4px 0 0 var(--accent); }
+.col.drop-right { box-shadow: 4px 0 0 var(--accent); }
+.col-head { display: flex; align-items: center; justify-content: flex-start; gap: 8px; font-size: 14px; min-height: 32px; padding: 0 0 0 4px; cursor: grab; }
+.col-name { font-weight: 700; }
+.cards { gap: 8px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 0; gap: 0; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); }
+.card-main { padding: 10px 8px 9px 6px; display: flex; flex-direction: column; gap: 6px; }
+.card-top { gap: 2px; }
+.card-top .check, .card-sub .check { margin-top: -3px; }
+.card-text { flex: 1 1 auto; min-width: 0; }
+.card-title { font-weight: 500; font-size: 14px; padding-top: 0; }
+.card-meta { padding-left: 32px; align-items: center; }
+.card-meta:empty { display: none; }
+.card .stop-note { padding-left: 32px; }
+.card-subs { border-top: 1px solid var(--line); padding: 0; }
+.card-sub { align-items: flex-start; gap: 2px; padding: 8px 8px 8px 10px; border-bottom: 1px solid var(--line); font-size: 14px; }
+.card-subs > div:last-child > .card-sub:last-child { border-bottom: 0; }
+.card-sub-title { overflow-wrap: anywhere; }
+.tags { display: flex; flex-wrap: wrap; gap: 3px 10px; margin-top: 2px; }
+.tag { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--faint); }
+.chip.label { color: var(--faint); }
+.add-col { flex: 0 0 240px; align-self: flex-start; display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 12px; border-radius: 10px; background: var(--panel); color: var(--muted); }
+.add-col:hover { color: var(--text); background: var(--panel-2); }
+.nav-item[draggable="true"] { cursor: grab; }

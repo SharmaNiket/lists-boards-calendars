@@ -33,13 +33,13 @@ Based on Todoist's public help pages and feature lists (November 2026). Nothing 
 
 | Todoist | Here | Why |
 | --- | --- | --- |
-| Projects | **Domains**, each with a weight | One priority scale can't say "Office P2 beats Game Dev P1". Weight handles ordering between domains; priority handles ordering inside one |
-| A project is one layout | A domain page holds many **blocks**, each a list or a board | Mixed layouts in one window |
-| Sub-task depth is limited; parents don't finish themselves | Any depth; a parent completes when its children are done and reopens when work is added | Requested |
-| No automation on moves | **Move rules** per board | Requested |
+| Projects | **Domains**, each with a Severity | One priority scale can't say "Work P2 beats Projects P1". Severity handles ordering between domains; priority handles ordering inside one |
+| A project is one layout | A domain page holds many **blocks**, each switchable between list, board and calendar | Mixed layouts in one window |
+| Sub-task depth is limited; parents don't finish themselves | Any depth; a parent completes when its children are done and reopens when work is added | A big task is rarely two levels deep, and ticking the parent by hand is busywork |
+| No automation on moves | **Move rules** per board | Moving a card is a decision; the dates that follow from it should not need typing |
 | Missed recurring tasks go overdue | They **roll forward quietly**; the miss is recorded in history, and the note about where you stopped stays on the task | Overdue piles punish a missed day twice |
-| One time per recurring task | **Several times a day**, each ticked off separately | Requested |
-| Editing a recurring date changes the series | Choose **just this one** or **whole series**; "Skip this time" | Requested |
+| One time per recurring task | **Several times a day**, each ticked off separately | Habits like breaks or water happen more than once |
+| Editing a recurring date changes the series | Choose **just this one** or **whole series**; "Skip this time" | Moving one session should not move every future one |
 | Calendar layout | Same shape: day / 3 days / week / month, priority colours, future occurrences dashed, a Plan panel. Time blocks and meetings sit on the same grid, and each day shows its load | One place for the whole week |
 | Drag a sub-task by indenting | Drop a task on another to nest it, on an edge to reorder or un-nest | Same result, easier to hit |
 | Durations are display only | Estimates feed day load, "how long do I have", and block suggestions | |
@@ -61,12 +61,12 @@ Time blocks (project-level, hard stops, planned against actual), calendar awaren
 | Sharing, assignment, workspaces, project insights | One user |
 | Templates | A block can be rebuilt in seconds; revisit if a real need shows up |
 | Email forwarding, Gmail add-on, browser extension, IFTTT / Zapier, calendar feeds out | Would need public endpoints or third-party accounts |
-| Extra themes | Dark only, by request |
+| Extra themes | Dark only, to keep the styling small |
 | Uncompletable tasks, text formatting in titles | Low value for the cost |
 
 ## Not built yet
 
 - A phone companion app with offline capture. The server's revision-based sync was designed for it.
 - Push notifications when the app is closed.
-- Importing existing Todoist tasks.
-- Dragging board columns to reorder them (use the arrows in "Rules and columns" for now).
+- A ready-made importer for other apps' exports (the JSON import format is documented in the README).
+- Table view for blocks (list, board and calendar are in).

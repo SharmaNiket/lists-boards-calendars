@@ -13,14 +13,29 @@ import { isOpen } from '/shared/logic.js';
 import { fmtDate, fmtTime, nowMinIn, toMin } from '/shared/dates.js';
 
 // onTask lets a sidebar entry accept a dragged task.
-function NavItem({ to, icon, label, count, dot, extra, onTask }) {
+let dragDomain = null;
+function NavItem({ to, icon, label, count, dot, extra, onTask, domainId }) {
   const [over, setOver] = useState(false);
   const here = (state.route.name + (state.route.arg ? '/' + state.route.arg : ''));
   const active = here === to || (to !== 'today' && here.startsWith(to + '/')) || (to === 'today' && state.route.name === 'today');
   return html`<a class=${'nav-item' + (active ? ' active' : '') + (over ? ' drop' : '')} href=${'#/' + to} aria-current=${active ? 'page' : null}
-    onDragOver=${(e) => { if (onTask && getDragId()) { e.preventDefault(); setOver(true); } }}
+    draggable=${domainId ? 'true' : null}
+    onDragStart=${(e) => { if (!domainId) return; dragDomain = domainId; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'domain'); }}
+    onDragEnd=${() => { dragDomain = null; }}
+    onDragOver=${(e) => { if ((domainId && dragDomain && dragDomain !== domainId) || (onTask && getDragId())) { e.preventDefault(); setOver(true); } }}
     onDragLeave=${() => setOver(false)}
-    onDrop=${(e) => { setOver(false); const id = getDragId(); if (!onTask || !id) return; e.preventDefault(); setDragId(null); onTask(id); }}>
+    onDrop=${(e) => {
+      setOver(false);
+      if (domainId && dragDomain && dragDomain !== domainId) {
+        e.preventDefault();
+        const ids = sel.domains().map((d) => d.id).filter((x) => x !== dragDomain);
+        ids.splice(ids.indexOf(domainId), 0, dragDomain);
+        dragDomain = null;
+        op('domain.reorder', { ids });
+        return;
+      }
+      const id = getDragId(); if (!onTask || !id) return; e.preventDefault(); setDragId(null); onTask(id);
+    }}>
     ${dot ? html`<span class="dot" style=${{ background: dot }}></span>` : html`<${Icon} name=${icon} size=${17} />`}
     <span class="grow ellipsis">${label}</span>
     ${extra || null}
@@ -52,9 +67,9 @@ function Sidebar() {
       <${NavItem} to="howlong" icon="hourglass" label="How long do I have?" />
       <${NavItem} to="filters" icon="filter" label="Filters and labels" />
     </div>
-    <div class="nav-head"><span>Domains</span><span class="faint">weight</span></div>
+    <div class="nav-head"><span>Domains</span><span class="faint">severity</span></div>
     <div class="nav-group">
-      ${sel.domains().map((d) => html`<${NavItem} key=${d.id} to=${'d/' + d.id} onTask=${(id) => op('task.move', { id, domainId: d.id })} dot=${d.color} label=${d.name} count=${open.filter((t) => t.domainId === d.id && !t.parentId).length} extra=${html`<span class="weight-tag" title="Weight in Today">W${d.weight}</span>`} />`)}
+      ${sel.domains().map((d) => html`<${NavItem} key=${d.id} domainId=${d.id} to=${'d/' + d.id} onTask=${(id) => op('task.move', { id, domainId: d.id })} dot=${d.color} label=${d.name} count=${open.filter((t) => t.domainId === d.id && !t.parentId).length} extra=${html`<span class="weight-tag" title="Severity: higher comes first in Today">S${d.weight}</span>`} />`)}
       <button class="nav-item add" onClick=${async () => { const name = await askText({ title: 'New domain', placeholder: 'e.g. Home', confirm: 'Create' }); if (name) { const d = await op('domain.save', { name }); go('d/' + d.id); } }}><${Icon} name="plus" size=${16} /><span>Add domain</span></button>
     </div>
     ${sel.filters().length ? html`<div class="nav-head"><span>Filters</span></div><div class="nav-group">${sel.filters().slice(0, 6).map((f) => html`<${NavItem} key=${f.id} to=${'filter/' + f.id} icon="filter" label=${f.name} />`)}</div>` : null}
@@ -103,7 +118,7 @@ function QuickAdd() {
         onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); submit(e.ctrlKey || e.metaKey); } }} />
       <input type="text" class="desc-line" value=${desc} placeholder="Description" aria-label="Description" onInput=${(e) => setDesc(e.target.value)} onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); submit(e.ctrlKey || e.metaKey); } }} />
       <${ChipPreview} parsed=${parsed} />
-      <div class="faint">Goes to <strong>${where ? where.name : 'Inbox'}</strong>${defaults.due && !parsed.due ? ', on ' + fmtDate(defaults.due, state.today) + (defaults.dueTime && !parsed.dueTime ? ' at ' + fmtTime(defaults.dueTime) : '') : ''}. Type as you think: <code>#GameDev @deep p2 fri 5pm for 45m every mon ${'{sun}'}</code></div>
+      <div class="faint">Goes to <strong>${where ? where.name : 'Inbox'}</strong>${defaults.due && !parsed.due ? ', on ' + fmtDate(defaults.due, state.today) + (defaults.dueTime && !parsed.dueTime ? ' at ' + fmtTime(defaults.dueTime) : '') : ''}. Type as you think: <code>#Projects @deep p2 fri 5pm for 45m every mon ${'{sun}'}</code></div>
       <div class="form-actions"><span class="faint">Enter adds. Ctrl+Enter adds and keeps this open.</span><span class="grow"></span><button class="btn" onClick=${close}>Cancel</button><button class="btn primary" disabled=${!parsed.title} onClick=${() => submit(false)}>Add task</button></div>
     </div>
   <//>`;

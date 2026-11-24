@@ -4,7 +4,8 @@
 import { toMin } from './dates.js';
 
 export const DEFAULT_SETTINGS = {
-  tz: 'Asia/Kolkata',
+  // The time zone of the machine running the app, until you change it in Settings.
+  tz: (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; } })(),
   weekEnd: 0, // Sunday closes the week
   capacityMin: 480, // how much scheduled time a day can hold
   dayStart: '07:00',
@@ -20,7 +21,7 @@ export const PRIORITY_COLORS = { 1: '#e5534b', 2: '#e8963a', 3: '#5b9cf5', 4: '#
 export const isOpen = (t) => !t.completedAt && !t.deletedAt;
 
 // Global order: domain weight first, then the task's priority inside its
-// domain. The two never mix, so an Office P2 can sit above a Game Dev P1.
+// domain. The two never mix, so a Work P2 can sit above a Projects P1.
 export function globalCompare(domainsById) {
   const weight = (t) => (t.domainId && domainsById.get(t.domainId) ? domainsById.get(t.domainId).weight || 0 : 0);
   return (a, b) =>
