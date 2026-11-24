@@ -1,0 +1,37 @@
+name: Feature request
+description: Suggest something concrete for the app to do.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For loose ideas or questions, [Discussions](../discussions) is a better place.
+        Some things were left out on purpose; docs/DECISIONS.md lists them with the reasons.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: The situation you are in, not the solution yet.
+      placeholder: When I plan my week I can't see which days already have too much on them.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like to happen?
+      description: How it would work from your side. Sketches and screenshots of other apps are welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What do you do today instead?
+      description: Any workaround you use, or other approaches you thought about.
+  - type: checkboxes
+    id: fit
+    attributes:
+      label: Fit with the project
+      options:
+        - label: I checked docs/DECISIONS.md and this is not something that was left out on purpose
+          required: true
+        - label: I would like to build this myself, with some guidance

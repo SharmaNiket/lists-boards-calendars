@@ -144,3 +144,18 @@ Two kinds of dragging are used, on purpose:
 - **Reminders fire only while a window is open.**
 - **No offline mode.** The browser needs to reach the server to make changes.
 - **Repeating blocks are created five weeks ahead**, so the calendar shows none beyond that until time moves on.
+
+## Working on it with others
+
+| File | What it is for |
+| --- | --- |
+| `LICENSE` | MIT. Anyone may use, change and share the code if they keep the notice |
+| `public/vendor/` | The bundled UI library, with its own licences (htm: Apache 2.0, Preact: MIT) |
+| `CONTRIBUTING.md` | How to run it, the rules that keep it simple, and how pull requests are reviewed |
+| `CODE_OF_CONDUCT.md` | The Contributor Covenant 2.1, with reports going through the private Security tab |
+| `SECURITY.md` | How to report a vulnerability privately, and advice for running it safely |
+| `.github/ISSUE_TEMPLATE/` | The bug and feature forms people see when they open an issue; blank issues are off, and questions are sent to Discussions |
+| `.github/pull_request_template.md` | The checklist every pull request starts with |
+| `.github/workflows/test.yml` | Runs on every push and pull request: checks every file parses, runs `npm test` on Node 22 and 24, then starts the server and loads the page |
+
+The workflow is the safety net for outside contributions: a pull request that breaks a test shows a red cross before you have to read a line of it.

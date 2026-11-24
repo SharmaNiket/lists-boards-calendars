@@ -4,6 +4,10 @@ A self-hosted task manager for one person. It keeps the parts of Todoist worth k
 
 It runs on any machine with Node, a Raspberry Pi included. Nothing else to install. There are no npm dependencies and no build step.
 
+![A domain page with a board and a list side by side](docs/screenshot.png)
+
+**Status:** usable day to day, and maintained in spare time. Ideas, bug reports and pull requests are welcome; see [Contributing](#contributing).
+
 ## Run it
 
 You need Node 22.13 or newer (the app uses Node's built-in SQLite).
@@ -120,3 +124,18 @@ All behaviour lives in `server/ops.js` behind one endpoint (`POST /api/op` with 
 - The phone gets the same web app in a narrow layout. It needs the Pi to be reachable; there is no offline mode yet.
 - Calendars are read-only, and only iCal feeds are supported.
 - Installing as an app needs Chrome or Edge. Over plain `http://` the app shell isn't cached, which only matters if the Pi is unreachable.
+
+## Contributing
+
+Bug reports, feature ideas and pull requests are all welcome.
+
+- **Found a bug or want a feature?** [Open an issue](../../issues/new/choose). The forms ask for what is needed to act on it.
+- **Have an idea or a question?** Start a thread in [Discussions](../../discussions).
+- **Want to write code?** Read [CONTRIBUTING.md](CONTRIBUTING.md) first. It covers running the app, the few rules that keep it simple, and how pull requests are reviewed. For anything bigger than a fix, open an issue before you start.
+- **Found a security problem?** Report it privately; see [SECURITY.md](SECURITY.md).
+
+Everyone taking part is expected to follow the [code of conduct](CODE_OF_CONDUCT.md).
+
+## Licence
+
+[MIT](LICENSE). The bundled UI library in `public/vendor/` keeps its own licences; see the README in that folder.

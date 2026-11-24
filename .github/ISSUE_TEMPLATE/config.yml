@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ideas and questions
+    url: https://github.com/NiketSharma-TGS/lists-boards-calendars/discussions
+    about: Not sure it is a bug, or have an idea to talk through? Start a discussion.
+  - name: Security problem
+    url: https://github.com/NiketSharma-TGS/lists-boards-calendars/security/advisories/new
+    about: Report it privately, not in a public issue.
